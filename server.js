@@ -22,25 +22,19 @@ const client = new pg.Client(process.env.DATABASE_URL);
 client.connect();
 client.on('error', err => console.error(err));
 
-// New for SQL
-
-// app.get('/location', (req, resp) => {
-//   return latLongHandler(req.query.data)
-//     .then( (localeData) => {
-//       resp.send(localeData);
-//     });
-// });
+// New SQL for location
 
 app.get('/location', (request, response) => {
   let query = request.query.data;
   const SQL = 'SELECT * FROM locations WHERE search_query=$1';
   const values = [query];
+  console.log(values);
   return client.query(SQL, values)
 
     .then(data => { //then if we have it, send it back
       if(data.rowCount){
-        console.log('Location retrieved from database')
-        console.log(data);
+        // console.log('Location retrieved from database')
+        // console.log(data);
         response.status(200).send(data.rows[0]);
       } else {//otherwise, get it from google
         const URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
@@ -69,24 +63,53 @@ app.get('/location', (request, response) => {
     })
 })
 
+// New SQL for weather
+
+app.get('/weather', (request, response) => {
+  const SQL = 'SELECT * FROM  weathers WHERE location_id=$1';
+  const values = [request.query.data.id];
+  return client.query(SQL, values)
+
+    .then(data =>{
+      if(data.rowCount){
+        // console.log('Weather retrieved from database')
+        // console.log(data);
+        response.status(200).send(data.rows[0]);
+      } else {
+        const URL = `https://api.darksky.net/forecast/${process.env.DARKSKY_API_KEY}/${request.query.data.latitude},${request.query.data.longitude}`;
+
+        return superagent.get(URL)
+        .then( forecastData => {
+          let dailyForecast = forecastData.body.daily.data;
+          dailyForecast.map( ele => {
+            new Forecast(ele);
+            let SQL = `INSERT INTO weathers (forcast, time, location_id) VALUES($1, $2, $3)`;
+            return client.query(SQL, [query, dailyForecast.forcast, dailyForecast.time, dailyForecast.location_id])
+          })
+          
+            .then(() => {
+
+              response.status(200).send(weeklyForecast);
+            })
+        })
+     }
+    })
+    .catch(err => {
+      console.error(err);
+      response.send(err)
+    })  
+})
 //================================ OLD ===============================
 
-// Routes
-// app.get('/location', (req, resp) => {
-//   return latLongHandler(req.query.data)
-//     .then( (localeData) => {
-//       resp.send(localeData);
+// Route
+
+// app.get('/weather', (req, resp) => {
+//   return weatherHandler(req.query.data.latitude, req.query.data.longitude)
+//     .then( (latLong) => {
+//       resp.send(latLong);
 //     });
+
 // });
-
-
-app.get('/weather', (req, resp) => {
-  return weatherHandler(req.query.data.latitude, req.query.data.longitude)
-    .then( (latLong) => {
-      resp.send(latLong);
-    });
-
-});
 
 app.get('/yelp', (req, resp) => {
   return yelpHandler(req.query.data)
@@ -114,29 +137,18 @@ let restaurantArray = [];
 
 // Handlers
 
-// function latLongHandler (query) {
-//   let locationData = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
+// function weatherHandler (lat, long) {
+//   let weatherData = `https://api.darksky.net/forecast/${process.env.DARKSKY_API_KEY}/${lat},${long}`;
 
-//   return superagent.get(locationData)
-//     .then( geoData => {
-//       const location = new Location(geoData.body.results[0]);
-//       return location;
+//   return superagent.get(weatherData)
+//     .then( forecastData => {
+//       const dailyForecast = forecastData.body.daily.data;
+//       dailyForecast.map( ele => {
+//         new Forecast(ele);
+//       });
+//       return weeklyForecast;
 //     })
-//     .catch( err => console.error(err));
 // }
-
-function weatherHandler (lat, long) {
-  let weatherData = `https://api.darksky.net/forecast/${process.env.DARKSKY_API_KEY}/${lat},${long}`;
-
-  return superagent.get(weatherData)
-    .then( forecastData => {
-      const dailyForecast = forecastData.body.daily.data;
-      dailyForecast.map( ele => {
-        new Forecast(ele);
-      });
-      return weeklyForecast;
-    })
-}
 
 function yelpHandler (query) {
   let lat = query.latitude;
@@ -222,6 +234,7 @@ function Film (video) {
   this.image_url = 'https://image.tmdb.org/t/p/w200_and_h300_bestv2/' + video.poster_path;
   this.popularity = video.popularity;
   this.released_on = video.release_date;
+
 }
 
 // Checks
