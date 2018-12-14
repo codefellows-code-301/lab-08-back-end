@@ -59,16 +59,20 @@ app.get('/location', (request, response) => {
     })
     .catch(err => {
       console.error(err);
-      response.send(err)
+      // response.send(err)
     })
 })
 
 // New SQL for weather
 
 app.get('/weather', (request, response) => {
+  console.log(request.query.data)
   const SQL = 'SELECT * FROM  weathers WHERE location_id=$1';
   const values = [request.query.data.id];
+  // const values = [request.query.data];
+  console.log(values, 'hey you')
   return client.query(SQL, values)
+
 
     .then(data =>{
       if(data.rowCount){
@@ -78,25 +82,28 @@ app.get('/weather', (request, response) => {
       } else {
         const URL = `https://api.darksky.net/forecast/${process.env.DARKSKY_API_KEY}/${request.query.data.latitude},${request.query.data.longitude}`;
 
+        console.log(URL, 'really')
         return superagent.get(URL)
         .then( forecastData => {
-          let dailyForecast = forecastData.body.daily.data;
-          dailyForecast.map( ele => {
-            new Forecast(ele);
-            let SQL = `INSERT INTO weathers (forcast, time, location_id) VALUES($1, $2, $3)`;
-            return client.query(SQL, [query, dailyForecast.forcast, dailyForecast.time, dailyForecast.location_id])
+          let weeklyForecast = forecastData.body.daily.data;
+          //This map function does the storage
+          weeklyForecast.map( oneDay => {
+            let SQL = `INSERT INTO weathers (forecast, time, location_id) VALUES($1, $2, $3)`;
+            let values = [oneDay.time, oneDay.forecast, request.query.data.id];
+            console.log(values, 'hey you');
+            return client.query(SQL, values)
           })
           
-            .then(() => {
-
-              response.status(200).send(weeklyForecast);
-            })
+          //normalize the data
+          // new Forecast(oneDay);
+          response.status(200).send(weeklyForecast);
+            
         })
      }
     })
     .catch(err => {
       console.error(err);
-      response.send(err)
+       response.send(err)
     })  
 })
 //================================ OLD ===============================

@@ -13,7 +13,7 @@ CREATE TABLE locations (
 
 CREATE TABLE weathers (
   id SERIAL PRIMARY KEY,
-  forcast VARCHAR (255),
+  forecast VARCHAR (255),
   time VARCHAR (255),
   location_id INTEGER NOT NULL, --why do we have this?
   FOREIGN KEY (location_id) REFERENCES locations(id) -- why do we have this?
