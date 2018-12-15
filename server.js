@@ -42,7 +42,7 @@ app.get('/location', (request, response) => {
         return superagent.get(URL)
           .then(result => {
             console.log('Location retrieved from Google')
-      
+
             //then normalize it
             let location = new Location(result.body.results[0]);
             let SQL = `INSERT INTO locations (search_query, formatted_query, latitude, longitude) VALUES($1, $2, $3, $4)`;
@@ -50,7 +50,7 @@ app.get('/location', (request, response) => {
             //store it in our DB
             return client.query(SQL, [query, location.formatted_query, location.latitude, location.longitude])
               .then(() =>{
-        
+
                 //then send it back
                 response.status(200).send(location);
               })
@@ -66,57 +66,90 @@ app.get('/location', (request, response) => {
 // New SQL for weather
 
 app.get('/weather', (request, response) => {
-  console.log(request.query.data)
-  const SQL = 'SELECT * FROM  weathers WHERE location_id=$1';
-  const values = [request.query.data.id];
+  let SQL = 'SELECT * FROM  weathers WHERE location_id=$1';
+  let values = [request.query.data.id];
   // const values = [request.query.data];
-  console.log(values, 'hey you')
-  return client.query(SQL, values)
+  client.query(SQL, values)
 
 
     .then(data =>{
-      if(data.rowCount){
-        // console.log('Weather retrieved from database')
-        // console.log(data);
-        response.status(200).send(data.rows[0]);
-      } else {
+      if(data.rowCount > 0){ //cache hit
+        console.log('Weather retrieved from database')
+        response.status(200).send(data.rows);
+      } else { //cache miss
         const URL = `https://api.darksky.net/forecast/${process.env.DARKSKY_API_KEY}/${request.query.data.latitude},${request.query.data.longitude}`;
 
-        console.log(URL, 'really')
         return superagent.get(URL)
-        .then( forecastData => {
-          let weeklyForecast = forecastData.body.daily.data;
-          //This map function does the storage
-          weeklyForecast.map( oneDay => {
-            let SQL = `INSERT INTO weathers (forecast, time, location_id) VALUES($1, $2, $3)`;
-            let values = [oneDay.time, oneDay.forecast, request.query.data.id];
-            console.log(values, 'hey you');
-            return client.query(SQL, values)
+          .then( forecastData => {
+            let weeklyForecast = forecastData.body.daily.data.map( oneDay => {
+              let weatherObject = new Forecast(oneDay);
+              SQL = `INSERT INTO weathers (time, forecast, location_id) VALUES($1, $2, $3)`;
+              values = [weatherObject.time, weatherObject.forecast, request.query.data.id];
+              client.query(SQL, values);
+              return(weatherObject);
+            })
+
+            //normalize the data
+            response.status(200).send(weeklyForecast);
+
           })
-          
-          //normalize the data
-          // new Forecast(oneDay);
-          response.status(200).send(weeklyForecast);
-            
-        })
-     }
+          .catch(err => {
+            console.error(err);
+            response.send(err)
+          })
+      }
     })
     .catch(err => {
       console.error(err);
-       response.send(err)
-    })  
+      response.send(err)
+    })
 })
+
+app.get('/yelp', (request, response) => {
+  let SQL = 'SELECT * FROM restaurants WHERE location_id=$1';
+  let values = [request.query.data.id];
+  // const values = [request.query.data];
+  client.query(SQL, values)
+
+    .then(data =>{
+      if(data.rowCount > 0){ //cache hit
+        console.log('Restaurants retrieved from database')
+        response.status(200).send(data.rows);
+      } else { //cache miss
+        let yelpData = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${request.query.data.latitude}&longitude=${request.query.data.longitude}&limit=20`;
+
+        return superagent.get(yelpData)
+          // This .set() adds our API KEY
+          .set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
+          .then( foodData => {
+            // The return is a mess that needs to be parsed
+            let restaurantData = foodData.body.businesses.map( business => {
+              let restaurantObject = new Restaurant(business);
+              let SQL = `INSERT INTO restaurants (name, image_url, price, rating, url, location_id) VALUES($1, $2, $3, $4, $5, $6)`;
+              let values = [restaurantObject.name, restaurantObject.image_url, restaurantObject.price, restaurantObject.rating, restaurantObject.url, request.query.data.id];
+              client.query(SQL, values);
+              return(restaurantObject);
+            })
+            //normalize the data
+            response.status(200).send(restaurantData);
+          })
+
+          .catch(err => {
+            console.error(err);
+            response.send(err)
+          })
+
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      response.send(err)
+    })
+})
+
 //================================ OLD ===============================
 
 // Route
-
-// app.get('/weather', (req, resp) => {
-//   return weatherHandler(req.query.data.latitude, req.query.data.longitude)
-//     .then( (latLong) => {
-//       resp.send(latLong);
-//     });
-
-// });
 
 app.get('/yelp', (req, resp) => {
   return yelpHandler(req.query.data)
@@ -137,25 +170,10 @@ app.get('/*', function(req, resp){
 });
 
 // Global Variables
-let weeklyForecast = [];
 let filmArray = [];
-let restaurantArray = [];
 
 
 // Handlers
-
-// function weatherHandler (lat, long) {
-//   let weatherData = `https://api.darksky.net/forecast/${process.env.DARKSKY_API_KEY}/${lat},${long}`;
-
-//   return superagent.get(weatherData)
-//     .then( forecastData => {
-//       const dailyForecast = forecastData.body.daily.data;
-//       dailyForecast.map( ele => {
-//         new Forecast(ele);
-//       });
-//       return weeklyForecast;
-//     })
-// }
 
 function yelpHandler (query) {
   let lat = query.latitude;
@@ -216,11 +234,8 @@ function Location (location, query) {
 
 function Forecast (day) {
   this.forecast = day.summary;
-
   let date = new Date(day.time * 1000);
   this.time = date.toDateString();
-
-  weeklyForecast.push(this);
 }
 
 function Restaurant (business) {
@@ -229,8 +244,6 @@ function Restaurant (business) {
   this.price = business.price;
   this.rating = business.rating;
   this.url = business.url;
-
-  restaurantArray.push(this);
 }
 
 function Film (video) {
