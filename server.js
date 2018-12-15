@@ -33,8 +33,7 @@ app.get('/location', (request, response) => {
 
     .then(data => { //then if we have it, send it back
       if(data.rowCount){
-        // console.log('Location retrieved from database')
-        // console.log(data);
+        console.log('Location retrieved from database')
         response.status(200).send(data.rows[0]);
       } else {//otherwise, get it from google
         const URL = `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${process.env.GEOCODE_API_KEY}`;
@@ -59,7 +58,7 @@ app.get('/location', (request, response) => {
     })
     .catch(err => {
       console.error(err);
-      // response.send(err)
+      response.send(err)
     })
 })
 
@@ -68,7 +67,6 @@ app.get('/location', (request, response) => {
 app.get('/weather', (request, response) => {
   let SQL = 'SELECT * FROM  weathers WHERE location_id=$1';
   let values = [request.query.data.id];
-  // const values = [request.query.data];
   client.query(SQL, values)
 
 
@@ -105,10 +103,11 @@ app.get('/weather', (request, response) => {
     })
 })
 
+// New SQL for Yelp
+
 app.get('/yelp', (request, response) => {
   let SQL = 'SELECT * FROM restaurants WHERE location_id=$1';
   let values = [request.query.data.id];
-  // const values = [request.query.data];
   client.query(SQL, values)
 
     .then(data =>{
@@ -122,7 +121,6 @@ app.get('/yelp', (request, response) => {
           // This .set() adds our API KEY
           .set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
           .then( foodData => {
-            // The return is a mess that needs to be parsed
             let restaurantData = foodData.body.businesses.map( business => {
               let restaurantObject = new Restaurant(business);
               let SQL = `INSERT INTO restaurants (name, image_url, price, rating, url, location_id) VALUES($1, $2, $3, $4, $5, $6)`;
@@ -130,6 +128,60 @@ app.get('/yelp', (request, response) => {
               client.query(SQL, values);
               return(restaurantObject);
             })
+            //normalize the data
+            response.status(200).send(restaurantData);
+          })
+
+          .catch(err => {
+            console.error(err);
+            response.send(err)
+          })
+        }
+    })
+    .catch(err => {
+      console.error(err);
+      response.send(err)
+    })
+})
+
+//New SQL for Movies
+
+app.get('/movies', (request, response) => {
+  let SQL = 'SELECT * FROM movies WHERE location_id=$1';
+  let values = [request.query.data.id];
+  client.query(SQL, values)
+
+    .then(data =>{
+      if(data.rowCount > 0){ //cache hit
+        console.log('Movies retrieved from database')
+        response.status(200).send(data.rows);
+      } else { //cache miss
+        let citySplice = query.formatted_query.split(',');
+        let movieData = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIES_API_KEY}&query=${citySplice[0]}, ${citySplice[1]}`;
+
+        return superagent.get(movieData)
+        .then( filmData => {
+          let films = filmData.body.results;//array of results
+          // Sort Films by Popularity
+          films.sort( function (a,b) {
+            if( a.popularity > b.popularity) return -1;
+            if( b.popularity > a.popularity) return 1;
+            return 0;
+          });
+          //If # of films less than 20
+          let numFilms = 20;
+          if(films.length < 20) numFilms = films.length;
+          //For Loop over first 20 films
+          filmArray = [];
+          for(let i = 0 ; i < numFilms ; i++) {
+            //create film objects and push into array.
+            let filmObject = filmArray.push(new Film (films[i]));
+          }
+          let SQL = `INSERT INTO movies (title, overview, average_votes, total_votes, image_url, popularity, released_on, location_id) VALUES($1, $2, $3, $4, $5, $6, $7, $8)`;
+          let values = [filmObject.title, filmObject.overview, filmObject.average_votes, filmObject.image_url, filmObject.popularity, filmObject.released_on, filmObject.location_id];
+          client.query(SQL, values);
+        })
+
             //normalize the data
             response.status(200).send(restaurantData);
           })
@@ -151,12 +203,12 @@ app.get('/yelp', (request, response) => {
 
 // Route
 
-app.get('/yelp', (req, resp) => {
-  return yelpHandler(req.query.data)
-    .then( (yelp) => {
-      resp.send(yelp);
-    });
-});
+// app.get('/yelp', (req, resp) => {
+//   return yelpHandler(req.query.data)
+//     .then( (yelp) => {
+//       resp.send(yelp);
+//     });
+// });
 
 app.get('/movies', (req, resp) => {
   return movieHandler(req.query.data)
@@ -175,27 +227,27 @@ let filmArray = [];
 
 // Handlers
 
-function yelpHandler (query) {
-  let lat = query.latitude;
-  let long = query.longitude;
+// function yelpHandler (query) {
+//   let lat = query.latitude;
+//   let long = query.longitude;
 
-  let yelpData = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${lat}&longitude=${long}&limit=20`;
+//   let yelpData = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${lat}&longitude=${long}&limit=20`;
 
-  return superagent.get(yelpData)
-    // This .set() adds our API KEY
-    .set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
-    .then( restaurantData => {
-      // The return is a mess that needs to be parsed
-      restaurantData = JSON.parse(restaurantData.text);
-      restaurantData.businesses.map( business => {
-        new Restaurant(business);
-      })
-      return restaurantArray;
-    })
-    .catch( err => {
-      console.error(err)
-    });
-}
+//   return superagent.get(yelpData)
+//     // This .set() adds our API KEY
+//     .set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
+//     .then( restaurantData => {
+//       // The return is a mess that needs to be parsed
+//       restaurantData = JSON.parse(restaurantData.text);
+//       restaurantData.businesses.map( business => {
+//         new Restaurant(business);
+//       })
+//       return restaurantArray;
+//     })
+//     .catch( err => {
+//       console.error(err)
+//     });
+// }
 
 function movieHandler (query) {
   let citySplice = query.formatted_query.split(',');
