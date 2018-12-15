@@ -15,8 +15,8 @@ CREATE TABLE weathers (
   id SERIAL PRIMARY KEY,
   forecast VARCHAR (255),
   time VARCHAR (255),
-  location_id INTEGER NOT NULL, --why do we have this?
-  FOREIGN KEY (location_id) REFERENCES locations(id) -- why do we have this?
+  location_id INTEGER NOT NULL,
+  FOREIGN KEY (location_id) REFERENCES locations(id)
 );
 
 CREATE TABLE restaurants (
@@ -24,8 +24,10 @@ CREATE TABLE restaurants (
   name VARCHAR (255),
   image_url VARCHAR (500),
   price VARCHAR (4),
-  rating NUMERIC (1,1),
-  url VARCHAR (500) 
+  rating NUMERIC (8,2),
+  url VARCHAR (500),
+  location_id INTEGER NOT NULL,
+  FOREIGN KEY (location_id) REFERENCES locations(id)
 );
 
 CREATE TABLE movies (
@@ -36,5 +38,7 @@ CREATE TABLE movies (
   total_votes NUMERIC (8, 2),
   image_url VARCHAR (500),
   popularity NUMERIC (4, 2),
-  released_on DATE
+  released_on DATE,
+  location_id INTEGER NOT NULL,
+  FOREIGN KEY (location_id) REFERENCES locations(id)
 );
