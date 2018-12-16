@@ -44,12 +44,13 @@ app.get('/location', (request, response) => {
 
             //then normalize it
             let location = new Location(result.body.results[0]);
-            let SQL = `INSERT INTO locations (search_query, formatted_query, latitude, longitude) VALUES($1, $2, $3, $4)`;
+            let SQL = `INSERT INTO locations (search_query, formatted_query, latitude, longitude) VALUES($1, $2, $3, $4) RETURNING id`;
 
             //store it in our DB
             return client.query(SQL, [query, location.formatted_query, location.latitude, location.longitude])
-              .then(() =>{
-
+              .then((result) =>{
+                location.id = result.rows[0].id;
+                console.log ('location stored to database', result);
                 //then send it back
                 response.status(200).send(location);
               })
@@ -57,8 +58,8 @@ app.get('/location', (request, response) => {
       }
     })
     .catch(err => {
+      console.log('location errror');
       console.error(err);
-      response.send(err)
     })
 })
 
@@ -68,7 +69,6 @@ app.get('/weather', (request, response) => {
   let SQL = 'SELECT * FROM  weathers WHERE location_id=$1';
   let values = [request.query.data.id];
   client.query(SQL, values)
-
 
     .then(data =>{
       if(data.rowCount > 0){ //cache hit
@@ -82,9 +82,14 @@ app.get('/weather', (request, response) => {
             let weeklyForecast = forecastData.body.daily.data.map( oneDay => {
               let weatherObject = new Forecast(oneDay);
               SQL = `INSERT INTO weathers (time, forecast, location_id) VALUES($1, $2, $3)`;
-              values = [weatherObject.time, weatherObject.forecast, request.query.data.id];
-              client.query(SQL, values);
-              return(weatherObject);
+              let values = [weatherObject.time, weatherObject.forecast, request.query.data.id];
+              client.query(SQL, values)
+
+                .catch(err => {
+                  console.log('=========================superagent weather errror====================')
+                  console.error(err);
+                })
+              return weatherObject;
             })
 
             //normalize the data
@@ -92,14 +97,14 @@ app.get('/weather', (request, response) => {
 
           })
           .catch(err => {
+            console.log('=========================weather error first one ====================')
             console.error(err);
-            response.send(err)
           })
       }
     })
     .catch(err => {
+      console.log('======================weather error second one =======================');
       console.error(err);
-      response.send(err)
     })
 })
 
@@ -133,14 +138,14 @@ app.get('/yelp', (request, response) => {
           })
 
           .catch(err => {
+            console.log('yelp errror');
             console.error(err);
-            response.send(err)
           })
-        }
+      }
     })
     .catch(err => {
+      console.log('yelp errror');
       console.error(err);
-      response.send(err)
     })
 })
 
@@ -150,55 +155,48 @@ app.get('/movies', (request, response) => {
   let SQL = 'SELECT * FROM movies WHERE location_id=$1';
   let values = [request.query.data.id];
   client.query(SQL, values)
-
-    .then(data =>{
+    .then(data => {
       if(data.rowCount > 0){ //cache hit
-        console.log('Movies retrieved from database')
+        // console.log('Movies retrieved from database')
         response.status(200).send(data.rows);
       } else { //cache miss
-        let citySplice = query.formatted_query.split(',');
-        let movieData = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIES_API_KEY}&query=${citySplice[0]}, ${citySplice[1]}`;
-
+        let citySplice = request.query.data.formatted_query.split(',');
+        // console.log(citySplice, 'cities');
+        let movieData = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIES_API_KEY}&query=${citySplice[0]},${citySplice[1]}`;
+        console.log(movieData);
         return superagent.get(movieData)
-        .then( filmData => {
-          let films = filmData.body.results;//array of results
-          // Sort Films by Popularity
-          films.sort( function (a,b) {
-            if( a.popularity > b.popularity) return -1;
-            if( b.popularity > a.popularity) return 1;
-            return 0;
-          });
-          //If # of films less than 20
-          let numFilms = 20;
-          if(films.length < 20) numFilms = films.length;
-          //For Loop over first 20 films
-          filmArray = [];
-          for(let i = 0 ; i < numFilms ; i++) {
+          .then( filmData => {
+            let films = filmData.body.results;//array of results
+            // Sort Films by Popularity
+            films.sort( function (a,b) {
+              if( a.popularity > b.popularity) return -1;
+              if( b.popularity > a.popularity) return 1;
+              return 0;
+            });
+            //If # of films less than 20
+            let numFilms = 20;
+            if(films.length < 20) numFilms = films.length;
             //create film objects and push into array.
-            let filmObject = filmArray.push(new Film (films[i]));
-          }
-          let SQL = `INSERT INTO movies (title, overview, average_votes, total_votes, image_url, popularity, released_on, location_id) VALUES($1, $2, $3, $4, $5, $6, $7, $8)`;
-          let values = [filmObject.title, filmObject.overview, filmObject.average_votes, filmObject.image_url, filmObject.popularity, filmObject.released_on, filmObject.location_id];
-          client.query(SQL, values);
-        })
+            let filmObject = films.map(film => {
 
+              let formattedFilm = new Film(film);
+              let SQL = `INSERT INTO movies (title, overview, average_votes, total_votes, image_url, popularity, released_on, location_id) VALUES($1, $2, $3, $4, $5, $6, $7, $8)`;
+              let values = [formattedFilm.title, formattedFilm.overview, formattedFilm.average_votes, formattedFilm.total_votes, formattedFilm.image_url, formattedFilm.popularity, formattedFilm.released_on, request.query.data.id];
+              // console.log(values);
+              client.query(SQL, values)
+                .catch(err=>{
+                  console.log('error putting in DB', err)
+                })
+              return formattedFilm;
+            })
+            // console.log('FILM OBJECTS', filmObject)
+            response.status(200).send(filmObject);
             //normalize the data
-            response.status(200).send(restaurantData);
           })
-
-          .catch(err => {
-            console.error(err);
-            response.send(err)
-          })
-
+          .catch(err=>console.log('shoudl be an error', err))
       }
     })
-    .catch(err => {
-      console.error(err);
-      response.send(err)
-    })
 })
-
 //================================ OLD ===============================
 
 // Route
@@ -210,20 +208,16 @@ app.get('/movies', (request, response) => {
 //     });
 // });
 
-app.get('/movies', (req, resp) => {
-  return movieHandler(req.query.data)
-    .then( (movies) => {
-      resp.send(movies);
-    });
-});
+// app.get('/movies', (req, resp) => {
+//   return movieHandler(req.query.data)
+//     .then( (movies) => {
+//       resp.send(movies);
+//     });
+// });
 
 app.get('/*', function(req, resp){
   resp.status(500).send('Don\'t look behind the curtain');
 });
-
-// Global Variables
-let filmArray = [];
-
 
 // Handlers
 
@@ -249,31 +243,31 @@ let filmArray = [];
 //     });
 // }
 
-function movieHandler (query) {
-  let citySplice = query.formatted_query.split(',');
-  let movieData = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIES_API_KEY}&query=${citySplice[0]}, ${citySplice[1]}`;
+// function movieHandler (query) {
+//   let citySplice = query.formatted_query.split(',');
+//   let movieData = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIES_API_KEY}&query=${citySplice[0]}, ${citySplice[1]}`;
 
-  return superagent.get(movieData)
-    .then( filmData => {
-      let films = filmData.body.results;//array of results
-      // Sort Films by Popularity
-      films.sort( function (a,b) {
-        if( a.popularity > b.popularity) return -1;
-        if( b.popularity > a.popularity) return 1;
-        return 0;
-      });
-      //If # of films less than 20
-      let numFilms = 20;
-      if(films.length < 20) numFilms = films.length;
-      //For Loop over first 20 films
-      filmArray = [];
-      for(let i = 0 ; i < numFilms ; i++) {
-        //create film objects and push into array.
-        filmArray.push(new Film (films[i]));
-      }
-      return filmArray;
-    });
-}
+//   return superagent.get(movieData)
+//     .then( filmData => {
+//       let films = filmData.body.results;//array of results
+//       // Sort Films by Popularity
+//       films.sort( function (a,b) {
+//         if( a.popularity > b.popularity) return -1;
+//         if( b.popularity > a.popularity) return 1;
+//         return 0;
+//       });
+//       //If # of films less than 20
+//       let numFilms = 20;
+//       if(films.length < 20) numFilms = films.length;
+//       //For Loop over first 20 films
+//       filmArray = [];
+//       for(let i = 0 ; i < numFilms ; i++) {
+//         //create film objects and push into array.
+//         filmArray.push(new Film (films[i]));
+//       }
+//       return filmArray;
+//     });
+// }
 
 // Constructors
 

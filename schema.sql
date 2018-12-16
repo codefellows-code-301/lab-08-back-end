@@ -33,7 +33,7 @@ CREATE TABLE restaurants (
 CREATE TABLE movies (
   id SERIAL PRIMARY KEY,
   title VARCHAR (255),
-  overview VARCHAR (500),
+  overview TEXT,
   average_votes NUMERIC (4,2),
   total_votes NUMERIC (8, 2),
   image_url VARCHAR (500),
