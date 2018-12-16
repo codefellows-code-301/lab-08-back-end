@@ -197,77 +197,10 @@ app.get('/movies', (request, response) => {
       }
     })
 })
-//================================ OLD ===============================
 
-// Route
-
-// app.get('/yelp', (req, resp) => {
-//   return yelpHandler(req.query.data)
-//     .then( (yelp) => {
-//       resp.send(yelp);
-//     });
+// app.get('/*', function(req, resp){
+//   resp.status(500).send('Don\'t look behind the curtain');
 // });
-
-// app.get('/movies', (req, resp) => {
-//   return movieHandler(req.query.data)
-//     .then( (movies) => {
-//       resp.send(movies);
-//     });
-// });
-
-app.get('/*', function(req, resp){
-  resp.status(500).send('Don\'t look behind the curtain');
-});
-
-// Handlers
-
-// function yelpHandler (query) {
-//   let lat = query.latitude;
-//   let long = query.longitude;
-
-//   let yelpData = `https://api.yelp.com/v3/businesses/search?term=restaurants&latitude=${lat}&longitude=${long}&limit=20`;
-
-//   return superagent.get(yelpData)
-//     // This .set() adds our API KEY
-//     .set('Authorization', `Bearer ${process.env.YELP_API_KEY}`)
-//     .then( restaurantData => {
-//       // The return is a mess that needs to be parsed
-//       restaurantData = JSON.parse(restaurantData.text);
-//       restaurantData.businesses.map( business => {
-//         new Restaurant(business);
-//       })
-//       return restaurantArray;
-//     })
-//     .catch( err => {
-//       console.error(err)
-//     });
-// }
-
-// function movieHandler (query) {
-//   let citySplice = query.formatted_query.split(',');
-//   let movieData = `https://api.themoviedb.org/3/search/movie?api_key=${process.env.MOVIES_API_KEY}&query=${citySplice[0]}, ${citySplice[1]}`;
-
-//   return superagent.get(movieData)
-//     .then( filmData => {
-//       let films = filmData.body.results;//array of results
-//       // Sort Films by Popularity
-//       films.sort( function (a,b) {
-//         if( a.popularity > b.popularity) return -1;
-//         if( b.popularity > a.popularity) return 1;
-//         return 0;
-//       });
-//       //If # of films less than 20
-//       let numFilms = 20;
-//       if(films.length < 20) numFilms = films.length;
-//       //For Loop over first 20 films
-//       filmArray = [];
-//       for(let i = 0 ; i < numFilms ; i++) {
-//         //create film objects and push into array.
-//         filmArray.push(new Film (films[i]));
-//       }
-//       return filmArray;
-//     });
-// }
 
 // Constructors
 
